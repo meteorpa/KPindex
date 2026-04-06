@@ -1,39 +1,91 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gráfico del Índice K Planetario con Chart.js</title>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Gráfico del Índice K Planetario</title>
+
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.1/moment.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/moment-timezone/0.5.34/moment-timezone-with-data.min.js"></script>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 1100px;
+            height: 520px;
+            margin: 0 auto;
+        }
+    </style>
 </head>
 <body>
-    <canvas id="planetary_k_index_chart" width="550" height="515"></canvas>
+    <div class="chart-container">
+        <canvas id="planetary_k_index_chart"></canvas>
+    </div>
 
     <script>
         $(document).ready(function () {
             $.getJSON('https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json')
                 .done(function (response) {
-                    // El JSON ahora viene como arreglo de objetos:
-                    // [{ time_tag: "...", Kp: 2.33, ... }, ...]
+                    console.log('Respuesta NOAA:', response);
 
-                    const nowUtc = moment.utc();
-                    const twoDaysAgoUtc = nowUtc.clone().subtract(48, 'hours');
+                    if (!Array.isArray(response) || response.length === 0) {
+                        console.error('La respuesta no contiene datos.');
+                        return;
+                    }
 
-                    const filteredData = response.filter(item => {
-                        const itemTime = moment.utc(item.time_tag);
-                        return itemTime.isSameOrAfter(twoDaysAgoUtc) && itemTime.isSameOrBefore(nowUtc);
-                    });
+                    let normalizedData = [];
 
-                    const labels = filteredData.map(item => {
-                        const start = moment.utc(item.time_tag).tz("America/Santiago");
+                    // Formato nuevo: [{ time_tag: "...", Kp: 2.33, ... }]
+                    if (response[0].time_tag !== undefined && response[0].Kp !== undefined) {
+                        normalizedData = response.map(item => ({
+                            time: item.time_tag,
+                            kp: parseFloat(item.Kp)
+                        }));
+                    }
+                    // Formato antiguo: [["time_tag","kp",...], [...], ...]
+                    else if (Array.isArray(response[0])) {
+                        normalizedData = response.slice(1).map(item => ({
+                            time: item[0],
+                            kp: parseFloat(item[1])
+                        }));
+                    } else {
+                        console.error('Formato JSON no reconocido.');
+                        return;
+                    }
+
+                    // Limpiar datos inválidos
+                    normalizedData = normalizedData.filter(item =>
+                        item.time && !isNaN(item.kp)
+                    );
+
+                    console.log('Datos normalizados:', normalizedData);
+
+                    if (normalizedData.length === 0) {
+                        console.error('No hay datos válidos para graficar.');
+                        return;
+                    }
+
+                    // Tomar los últimos 16 registros = 48 horas aprox. (cada 3 horas)
+                    const last48Hours = normalizedData.slice(-16);
+
+                    const labels = last48Hours.map(item => {
+                        const start = moment.utc(item.time).tz("America/Santiago");
                         const end = start.clone().add(3, 'hours');
-                        return `${start.format('MMMM-DD HH:mm')} a ${end.format('HH:mm')}`;
+                        return `${start.format('DD/MM HH:mm')} a ${end.format('HH:mm')}`;
                     });
 
-                    const values = filteredData.map(item => parseFloat(item.Kp));
+                    const values = last48Hours.map(item => item.kp);
+
+                    console.log('Labels:', labels);
+                    console.log('Values:', values);
 
                     const ctx = document.getElementById('planetary_k_index_chart').getContext('2d');
 
@@ -51,12 +103,14 @@
                                     if (value >= 3) return '#FFC800';
                                     return '#92D050';
                                 }),
+                                borderColor: '#666',
                                 borderWidth: 1
                             }]
                         },
                         options: {
                             responsive: true,
                             maintainAspectRatio: false,
+                            animation: false,
                             scales: {
                                 y: {
                                     beginAtZero: true,
@@ -70,6 +124,11 @@
                                     }
                                 },
                                 x: {
+                                    ticks: {
+                                        maxRotation: 90,
+                                        minRotation: 45,
+                                        autoSkip: true
+                                    },
                                     title: {
                                         display: true,
                                         text: 'Hora Local de Chile'
@@ -89,7 +148,7 @@
                     });
                 })
                 .fail(function (jqxhr, textStatus, error) {
-                    console.error("Error cargando JSON:", textStatus, error);
+                    console.error('Error cargando JSON:', textStatus, error);
                 });
         });
     </script>
