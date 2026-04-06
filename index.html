@@ -13,68 +13,84 @@
     <canvas id="planetary_k_index_chart" width="550" height="515"></canvas>
 
     <script>
-        $(document).ready(function() {
-            $.getJSON('https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json', function(response) {
-                // Eliminar el encabezado de la respuesta
-                const data = response.slice(1);
+        $(document).ready(function () {
+            $.getJSON('https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json')
+                .done(function (response) {
+                    // El JSON ahora viene como arreglo de objetos:
+                    // [{ time_tag: "...", Kp: 2.33, ... }, ...]
 
-                // Filtrar los datos para obtener solo los últimos 2 días (48 horas)
-                const now = moment();
-                const twoDaysAgo = now.clone().subtract(48, 'hours');
-                const filteredData = data.filter(item => moment(item[0]).isBetween(twoDaysAgo, now));
+                    const nowUtc = moment.utc();
+                    const twoDaysAgoUtc = nowUtc.clone().subtract(48, 'hours');
 
-                const labels = filteredData.map(item => {
-                    const start = moment.tz(item[0], "America/Santiago");
-                    const end = start.clone().add(3, 'hours');
-                    return `${start.format('MMMM-DD HH:mm')} a ${end.format('HH:mm')}`;
-                });
-                const values = filteredData.map(item => parseFloat(item[1]));
+                    const filteredData = response.filter(item => {
+                        const itemTime = moment.utc(item.time_tag);
+                        return itemTime.isSameOrAfter(twoDaysAgoUtc) && itemTime.isSameOrBefore(nowUtc);
+                    });
 
-                const ctx = document.getElementById('planetary_k_index_chart').getContext('2d');
-                new Chart(ctx, {
-                    type: 'bar',
-                    data: {
-                        labels: labels,
-                        datasets: [{
-                            label: 'Índice Kp',
-                            data: values,
-                            backgroundColor: values.map(value => {
-                                if (value >= 7) return '#C80000';
-                                if (value >= 5) return '#FF0000';
-                                if (value >= 4) return '#FF9600';
-                                if (value >= 3) return '#FFC800';
-                                return '#92D050';
-                            })
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        scales: {
-                            y: {
-                                beginAtZero: true,
-                                max: 9,
-                                stepSize: 1,
-                                title: {
-                                    display: true,
-                                    text: 'Índice Kp'
+                    const labels = filteredData.map(item => {
+                        const start = moment.utc(item.time_tag).tz("America/Santiago");
+                        const end = start.clone().add(3, 'hours');
+                        return `${start.format('MMMM-DD HH:mm')} a ${end.format('HH:mm')}`;
+                    });
+
+                    const values = filteredData.map(item => parseFloat(item.Kp));
+
+                    const ctx = document.getElementById('planetary_k_index_chart').getContext('2d');
+
+                    new Chart(ctx, {
+                        type: 'bar',
+                        data: {
+                            labels: labels,
+                            datasets: [{
+                                label: 'Índice Kp',
+                                data: values,
+                                backgroundColor: values.map(value => {
+                                    if (value >= 7) return '#C80000';
+                                    if (value >= 5) return '#FF0000';
+                                    if (value >= 4) return '#FF9600';
+                                    if (value >= 3) return '#FFC800';
+                                    return '#92D050';
+                                }),
+                                borderWidth: 1
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            scales: {
+                                y: {
+                                    beginAtZero: true,
+                                    max: 9,
+                                    ticks: {
+                                        stepSize: 1
+                                    },
+                                    title: {
+                                        display: true,
+                                        text: 'Índice Kp'
+                                    }
+                                },
+                                x: {
+                                    title: {
+                                        display: true,
+                                        text: 'Hora Local de Chile'
+                                    }
                                 }
                             },
-                            x: {
+                            plugins: {
                                 title: {
                                     display: true,
-                                    text: 'Hora Local de Chile'
+                                    text: 'Índice K Planetario Estimado (Últimas 48 horas)'
+                                },
+                                legend: {
+                                    display: true
                                 }
                             }
-                        },
-                        plugins: {
-                            title: {
-                                display: true,
-                                text: 'Índice K Planetario Estimado (Últimas 48 horas)'
-                            }
                         }
-                    }
+                    });
+                })
+                .fail(function (jqxhr, textStatus, error) {
+                    console.error("Error cargando JSON:", textStatus, error);
                 });
-            });
         });
     </script>
 </body>
