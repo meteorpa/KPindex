@@ -1,155 +1,95 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Gráfico del Índice K Planetario</title>
-
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gráfico del Índice K Planetario con Chart.js</title>
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.1/moment.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/moment-timezone/0.5.34/moment-timezone-with-data.min.js"></script>
-
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 20px;
-        }
-
-        .chart-container {
-            position: relative;
-            width: 100%;
-            max-width: 1100px;
-            height: 520px;
-            margin: 0 auto;
-        }
-    </style>
 </head>
 <body>
-    <div class="chart-container">
-        <canvas id="planetary_k_index_chart"></canvas>
-    </div>
+    <canvas id="planetary_k_index_chart" width="550" height="515"></canvas>
 
     <script>
-        $(document).ready(function () {
-            $.getJSON('https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json')
-                .done(function (response) {
-                    console.log('Respuesta NOAA:', response);
+        $(document).ready(function() {
+            $.getJSON('https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json', function(response) {
 
-                    if (!Array.isArray(response) || response.length === 0) {
-                        console.error('La respuesta no contiene datos.');
-                        return;
-                    }
+                // Ya no hay encabezado: usar directamente la respuesta
+                const data = response;
 
-                    let normalizedData = [];
+                // Hora actual en UTC para comparar con el time_tag del NOAA
+                const now = moment.utc();
+                const twoDaysAgo = now.clone().subtract(48, 'hours');
 
-                    // Formato nuevo: [{ time_tag: "...", Kp: 2.33, ... }]
-                    if (response[0].time_tag !== undefined && response[0].Kp !== undefined) {
-                        normalizedData = response.map(item => ({
-                            time: item.time_tag,
-                            kp: parseFloat(item.Kp)
-                        }));
-                    }
-                    // Formato antiguo: [["time_tag","kp",...], [...], ...]
-                    else if (Array.isArray(response[0])) {
-                        normalizedData = response.slice(1).map(item => ({
-                            time: item[0],
-                            kp: parseFloat(item[1])
-                        }));
-                    } else {
-                        console.error('Formato JSON no reconocido.');
-                        return;
-                    }
+                // Filtrar datos de las últimas 48 horas
+                const filteredData = data.filter(item => {
+                    const itemTime = moment.utc(item.time_tag);
+                    return itemTime.isSameOrAfter(twoDaysAgo) && itemTime.isSameOrBefore(now);
+                });
 
-                    // Limpiar datos inválidos
-                    normalizedData = normalizedData.filter(item =>
-                        item.time && !isNaN(item.kp)
-                    );
+                const labels = filteredData.map(item => {
+                    const start = moment.utc(item.time_tag).tz("America/Santiago");
+                    const end = start.clone().add(3, 'hours');
+                    return `${start.format('DD/MM HH:mm')} a ${end.format('HH:mm')}`;
+                });
 
-                    console.log('Datos normalizados:', normalizedData);
+                const values = filteredData.map(item => parseFloat(item.Kp));
 
-                    if (normalizedData.length === 0) {
-                        console.error('No hay datos válidos para graficar.');
-                        return;
-                    }
+                console.log("Datos filtrados:", filteredData);
+                console.log("Labels:", labels);
+                console.log("Values:", values);
 
-                    // Tomar los últimos 16 registros = 48 horas aprox. (cada 3 horas)
-                    const last48Hours = normalizedData.slice(-16);
+                const ctx = document.getElementById('planetary_k_index_chart').getContext('2d');
 
-                    const labels = last48Hours.map(item => {
-                        const start = moment.utc(item.time).tz("America/Santiago");
-                        const end = start.clone().add(3, 'hours');
-                        return `${start.format('DD/MM HH:mm')} a ${end.format('HH:mm')}`;
-                    });
-
-                    const values = last48Hours.map(item => item.kp);
-
-                    console.log('Labels:', labels);
-                    console.log('Values:', values);
-
-                    const ctx = document.getElementById('planetary_k_index_chart').getContext('2d');
-
-                    new Chart(ctx, {
-                        type: 'bar',
-                        data: {
-                            labels: labels,
-                            datasets: [{
-                                label: 'Índice Kp',
-                                data: values,
-                                backgroundColor: values.map(value => {
-                                    if (value >= 7) return '#C80000';
-                                    if (value >= 5) return '#FF0000';
-                                    if (value >= 4) return '#FF9600';
-                                    if (value >= 3) return '#FFC800';
-                                    return '#92D050';
-                                }),
-                                borderColor: '#666',
-                                borderWidth: 1
-                            }]
-                        },
-                        options: {
-                            responsive: true,
-                            maintainAspectRatio: false,
-                            animation: false,
-                            scales: {
-                                y: {
-                                    beginAtZero: true,
-                                    max: 9,
-                                    ticks: {
-                                        stepSize: 1
-                                    },
-                                    title: {
-                                        display: true,
-                                        text: 'Índice Kp'
-                                    }
+                new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: 'Índice Kp',
+                            data: values,
+                            backgroundColor: values.map(value => {
+                                if (value >= 7) return '#C80000';
+                                if (value >= 5) return '#FF0000';
+                                if (value >= 4) return '#FF9600';
+                                if (value >= 3) return '#FFC800';
+                                return '#92D050';
+                            }),
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                max: 9,
+                                ticks: {
+                                    stepSize: 1
                                 },
-                                x: {
-                                    ticks: {
-                                        maxRotation: 90,
-                                        minRotation: 45,
-                                        autoSkip: true
-                                    },
-                                    title: {
-                                        display: true,
-                                        text: 'Hora Local de Chile'
-                                    }
-                                }
-                            },
-                            plugins: {
                                 title: {
                                     display: true,
-                                    text: 'Índice K Planetario Estimado (Últimas 48 horas)'
-                                },
-                                legend: {
-                                    display: true
+                                    text: 'Índice Kp'
+                                }
+                            },
+                            x: {
+                                title: {
+                                    display: true,
+                                    text: 'Hora Local de Chile'
                                 }
                             }
+                        },
+                        plugins: {
+                            title: {
+                                display: true,
+                                text: 'Índice K Planetario Estimado (Últimas 48 horas)'
+                            }
                         }
-                    });
-                })
-                .fail(function (jqxhr, textStatus, error) {
-                    console.error('Error cargando JSON:', textStatus, error);
+                    }
                 });
+            });
         });
     </script>
 </body>
